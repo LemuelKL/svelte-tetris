@@ -255,11 +255,11 @@ export const tetris: tetromino[] = [
 	}
 ];
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 
 export const gameRunning = writable(false);
 export const x = writable(4);
-export const y = writable(0);
+export const y = writable(-1);
 
 export const rotateIdx = writable(0);
 export const nextRotateIdx = derived(rotateIdx, ($rotateIdx) => {
@@ -279,3 +279,11 @@ export const fallingTetroState = derived(
 
 export const score = writable(0);
 export const rowsEliminated = writable(0);
+
+export const resetGameState = () => {
+	score.set(0); 
+	x.set(4); 
+	y.set(-1); 
+	rotateIdx.set(0);
+	tetrisIdx.set(get(nextRotateIdx))
+}

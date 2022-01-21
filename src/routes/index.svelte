@@ -1,5 +1,7 @@
 <script lang="ts">
+	import KeyCap from '$lib/components/KeyCap.svelte';
 	import type { SvelteComponent } from 'svelte';
+	import { writable } from 'svelte/store';
 	const nRow = 20;
 	const nCol = 10;
 	let table: typeof SvelteComponent[][] = new Array(nRow)
@@ -8,6 +10,7 @@
 
 	import {
 		gameRunning,
+		resetGameState,
 		x,
 		y,
 		rotateIdx,
@@ -21,14 +24,17 @@
 	} from './../stores/GameState.store';
 
 	$: lockAction = false || !$gameRunning;
+	let keyDown = writable('');
+	keyDown.subscribe(async (key: string) => {
+		await new Promise((res) => setTimeout(res, 200));
+		keyDown.set('');
+	});
+
 	const handleKeydown = (e: KeyboardEvent) => {
+		keyDown.set(e.key);
 		let dY = 0;
 		let dX = 0;
 		if (!lockAction) {
-			if (e.key === 'ArrowUp') {
-				dY--;
-				if (isLegalMove(dY, dX)) y.update((y) => y - 1);
-			}
 			if (e.key === 'ArrowDown') {
 				dY++;
 				if (isLegalMove(dY, dX)) y.update((y) => y + 1);
@@ -41,7 +47,7 @@
 				dX++;
 				if (isLegalMove(dY, dX)) x.update((x) => x + 1);
 			}
-			if (e.key === 'r') {
+			if (e.key === 'ArrowUp') {
 				if (isLegalMove(dY, dX, $fallingTetro.state($y, $x, $nextRotateIdx))) {
 					$rotateIdx = $nextRotateIdx;
 				}
@@ -87,41 +93,45 @@
 	gameRunning.subscribe((g) => {
 		if (g) {
 			table = new Array(nRow).fill(null).map(() => new Array(nCol).fill(null));
-			game();
+			resetGameState();
+			spawnNextTetro();
 		}
 	});
 
-	const game = async () => {
-		console.log('Game starts.');
-		while (true) {
-			await new Promise((res) => setTimeout(res, 1500));
-			lockAction = false;
-			if ($y === 0 && !isLegalMove(0, 0)) {
-				console.log('Game ends.');
-				$gameRunning = false;
-				return;
-			}
-			if ($y < 19 && isLegalMove(1, 0)) {
-				y.update((y) => y + 1);
-			} else {
-				// Write tetro into table
-				const state = $fallingTetroState;
-				for (let _ = 0; _ < state.length; _++) {
-					const coord = state[_];
-					const ptY = coord[0];
-					const ptX = coord[1];
-					table[ptY][ptX] = $fallingTetro.texture;
-				}
-				// Check for row elimination
-				removeCompletedRows();
-				// Update game state for next tetro
-				$rotateIdx = 0;
-				$x = 4;
-				$y = 0;
-				$tetrisIdx = nextTetrisIdx;
-				nextTetrisIdx = Math.floor(Math.random() * 7);
-			}
+	const spawnNextTetro = async () => {
+		console.log('Game cycle.');
+		$rotateIdx = 0;
+		$x = 4;
+		$y = -1;
+		$tetrisIdx = nextTetrisIdx;
+		nextTetrisIdx = Math.floor(Math.random() * 7);
+		lockAction = false;
+		if ($y === -1 && !isLegalMove(1, 0)) {
+			console.log('Game ends.');
+			$gameRunning = false;
+			return;
 		}
+		fall().then(() => {
+			const state = $fallingTetroState;
+			for (let _ = 0; _ < state.length; _++) {
+				const coord = state[_];
+				const ptY = coord[0];
+				const ptX = coord[1];
+				table[ptY][ptX] = $fallingTetro.texture;
+			}
+			removeCompletedRows();
+			spawnNextTetro();
+		});
+	};
+
+	const fall = (): Promise<void> => {
+		return new Promise(async (resolve, reject) => {
+			while ($y < 19 && isLegalMove(1, 0)) {
+				y.update((y) => y + 1);
+				await new Promise((res) => setTimeout(res, 1000));
+			}
+			resolve();
+		});
 	};
 
 	const containCoord = (map: number[][], coord: number[]) => {
@@ -146,7 +156,7 @@
 			const coord = state[_];
 			const ptY = coord[0] + dY;
 			const ptX = coord[1] + dX;
-			if (!(ptY >= 0 && ptY < nRow && ptX >= 0 && ptX < nCol) || table[ptY][ptX]) {
+			if (!(ptY >= -1 && ptY < nRow && ptX >= 0 && ptX < nCol) || (ptY >= 0 && table[ptY][ptX])) {
 				return false;
 			}
 		}
@@ -158,9 +168,9 @@
 
 <div class="flex h-full gap-6">
 	<div class="bg-slate-700 h-full">
-		<div class="flex flex-col">
+		<div class="flex flex-col divide-y divide-slate-900">
 			{#each table as row, i}
-				<div class="flex">
+				<div class="flex first:pt-0 last:pb-0 divide-x divide-slate-900">
 					{#each row as col, j}
 						{#if shouldDrawBlock(i, j)}
 							<svelte:component this={$fallingTetro.texture} />
@@ -192,7 +202,7 @@
 		</div>
 		<div class="font-mono text-white">Rows: {$rowsEliminated}</div>
 		<div class="grow font-mono text-white">Score: {$score}</div>
-		<div class="shrink flex">
+		<div class="shrink flex flex-col gap-3">
 			{#if !$gameRunning}
 				<button
 					class="w-full rounded-sm bg-slate-400 hover:bg-slate-300 transition-colors duration-200"
@@ -200,6 +210,15 @@
 						$gameRunning = true;
 					}}>Start</button
 				>
+			{:else}
+				<div class="grid grid-cols-3 gap-3">
+					<div />
+					<KeyCap char={'^'} active={$keyDown === 'ArrowUp'} />
+					<div />
+					<KeyCap char={'<'} active={$keyDown === 'ArrowLeft'} />
+					<KeyCap char={'v'} active={$keyDown === 'ArrowDown'} />
+					<KeyCap char={'>'} active={$keyDown === 'ArrowRight'} />
+				</div>
 			{/if}
 		</div>
 	</div>
