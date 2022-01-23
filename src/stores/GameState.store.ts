@@ -13,6 +13,7 @@ interface tetromino {
 	state: (y: number, x: number, rotateIdx: number) => number[][];
 	width: number;
 	height: number;
+	spawnY: number;
 }
 export const tetris: tetromino[] = [
 	{
@@ -47,7 +48,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 4,
-		height: 4
+		height: 4,
+		spawnY: 0
 	},
 	{
 		name: 'J',
@@ -81,7 +83,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 3,
-		height: 3
+		height: 3,
+		spawnY: 1
 	},
 	{
 		name: 'L',
@@ -115,7 +118,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 3,
-		height: 3
+		height: 3,
+		spawnY: 1
 	},
 	{
 		name: 'O',
@@ -149,7 +153,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 4,
-		height: 3
+		height: 3,
+		spawnY: 1
 	},
 	{
 		name: 'S',
@@ -183,7 +188,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 3,
-		height: 3
+		height: 3,
+		spawnY: 1
 	},
 	{
 		name: 'T',
@@ -217,7 +223,8 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 3,
-		height: 3
+		height: 3,
+		spawnY: 1
 	},
 	{
 		name: 'Z',
@@ -251,15 +258,16 @@ export const tetris: tetromino[] = [
 			][rotateIdx];
 		},
 		width: 3,
-		height: 3
+		height: 3,
+		spawnY: 1
 	}
 ];
 
 import { writable, derived, get } from 'svelte/store';
 
-export const gameRunning = writable(false);
+export const gameSwitch = writable(false);
 export const x = writable(4);
-export const y = writable(-1);
+export const y = writable(0);
 
 export const rotateIdx = writable(0);
 export const nextRotateIdx = derived(rotateIdx, ($rotateIdx) => {
@@ -280,10 +288,10 @@ export const fallingTetroState = derived(
 export const score = writable(0);
 export const rowsEliminated = writable(0);
 
-export const resetGameState = () => {
-	score.set(0); 
-	x.set(4); 
-	y.set(-1); 
+export const resetGameState = (): void => {
+	score.set(0);
+	x.set(4);
+	y.set(0);
 	rotateIdx.set(0);
-	tetrisIdx.set(get(nextRotateIdx))
-}
+	tetrisIdx.set(get(nextRotateIdx));
+};

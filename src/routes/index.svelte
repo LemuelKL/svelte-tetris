@@ -9,7 +9,7 @@
 		.map(() => new Array(nCol).fill(null));
 
 	import {
-		gameRunning,
+		gameSwitch,
 		resetGameState,
 		x,
 		y,
@@ -23,7 +23,22 @@
 		rowsEliminated
 	} from './../stores/GameState.store';
 
-	$: lockAction = false || !$gameRunning;
+	const isLegalMove = (dY: number, dX: number, state?: number[][]): boolean => {
+		if (!state) {
+			state = $fallingTetroState;
+		}
+		for (let _ = 0; _ < state.length; _++) {
+			const coord = state[_];
+			const ptY = coord[0] + dY;
+			const ptX = coord[1] + dX;
+
+			if (!(ptY >= 0 && ptY < nRow && ptX >= 0 && ptX < nCol) || table[ptY][ptX]) {
+				return false;
+			}
+		}
+		return true;
+	};
+
 	let keyDown = writable('');
 	keyDown.subscribe(async (key: string) => {
 		await new Promise((res) => setTimeout(res, 200));
@@ -31,35 +46,34 @@
 	});
 
 	const handleKeydown = (e: KeyboardEvent) => {
+		if (!$gameSwitch) return;
 		keyDown.set(e.key);
 		let dY = 0;
 		let dX = 0;
-		if (!lockAction) {
-			if (e.key === 'ArrowDown') {
-				dY++;
-				if (isLegalMove(dY, dX)) y.update((y) => y + 1);
+
+		if (e.key === 'ArrowDown') {
+			dY++;
+			if (isLegalMove(dY, dX)) y.update((y) => y + 1);
+		}
+		if (e.key === 'ArrowLeft') {
+			dX--;
+			if (isLegalMove(dY, dX)) x.update((x) => x - 1);
+		}
+		if (e.key === 'ArrowRight') {
+			dX++;
+			if (isLegalMove(dY, dX)) x.update((x) => x + 1);
+		}
+		if (e.key === 'ArrowUp') {
+			if (isLegalMove(dY, dX, $fallingTetro.state($y, $x, $nextRotateIdx))) {
+				$rotateIdx = $nextRotateIdx;
 			}
-			if (e.key === 'ArrowLeft') {
-				dX--;
-				if (isLegalMove(dY, dX)) x.update((x) => x - 1);
-			}
-			if (e.key === 'ArrowRight') {
-				dX++;
-				if (isLegalMove(dY, dX)) x.update((x) => x + 1);
-			}
-			if (e.key === 'ArrowUp') {
-				if (isLegalMove(dY, dX, $fallingTetro.state($y, $x, $nextRotateIdx))) {
-					$rotateIdx = $nextRotateIdx;
-				}
-			}
-			if (e.code === 'Space') {
-				lockAction = true;
-				while (true) {
-					if (isLegalMove(1, 0)) {
-						y.update((y) => y + 1);
-					} else {
-						break;
-					}
+		}
+		if (e.code === 'Space') {
+			while (true) {
+				if (isLegalMove(1, 0)) {
+					y.update((y) => y + 1);
+				} else {
+					break;
 				}
 			}
 		}
@@ -90,48 +104,45 @@
 	let nextTetrisIdx = Math.floor(Math.random() * 7);
 	$: nextTetro = tetris[nextTetrisIdx];
 
-	gameRunning.subscribe((g) => {
+	gameSwitch.subscribe((g) => {
 		if (g) {
-			table = new Array(nRow).fill(null).map(() => new Array(nCol).fill(null));
 			resetGameState();
-			spawnNextTetro();
+			table = new Array(nRow).fill(null).map(() => new Array(nCol).fill(null));
+			game();
 		}
 	});
 
-	const spawnNextTetro = async () => {
-		console.log('Game cycle.');
-		$rotateIdx = 0;
-		$x = 4;
-		$y = -1;
-		$tetrisIdx = nextTetrisIdx;
-		nextTetrisIdx = Math.floor(Math.random() * 7);
-		lockAction = false;
-		if ($y === -1 && !isLegalMove(1, 0)) {
-			console.log('Game ends.');
-			$gameRunning = false;
-			return;
+	const carveTetro = () => {
+		const state = $fallingTetroState;
+		for (let _ = 0; _ < state.length; _++) {
+			table[state[_][0]][state[_][1]] = $fallingTetro.texture;
 		}
-		fall().then(() => {
-			const state = $fallingTetroState;
-			for (let _ = 0; _ < state.length; _++) {
-				const coord = state[_];
-				const ptY = coord[0];
-				const ptX = coord[1];
-				table[ptY][ptX] = $fallingTetro.texture;
-			}
-			removeCompletedRows();
-			spawnNextTetro();
-		});
 	};
 
-	const fall = (): Promise<void> => {
-		return new Promise(async (resolve, reject) => {
-			while ($y < 19 && isLegalMove(1, 0)) {
+	const spawnNextTetro = async () => {
+		$rotateIdx = 0;
+		$tetrisIdx = nextTetrisIdx;
+		nextTetrisIdx = Math.floor(Math.random() * 7);
+		$x = 4;
+		$y = $fallingTetro.spawnY;
+		if (!isLegalMove(0, 0)) {
+			console.log('Game ends.');
+			$gameSwitch = false;
+			return;
+		}
+	};
+
+	const game = async () => {
+		while ($gameSwitch && $y < nRow - 1) {
+			await new Promise((res) => setTimeout(res, 1000));
+			if (isLegalMove(1, 0)) {
 				y.update((y) => y + 1);
-				await new Promise((res) => setTimeout(res, 1000));
+			} else {
+				carveTetro();
+				removeCompletedRows();
+				spawnNextTetro();
 			}
-			resolve();
-		});
+		}
 	};
 
 	const containCoord = (map: number[][], coord: number[]) => {
@@ -147,21 +158,6 @@
 	$: shouldDrawBlock = (row: number, col: number): boolean => {
 		return containCoord($fallingTetroState, [row, col]);
 	};
-
-	$: isLegalMove = (dY: number, dX: number, state?: number[][]): boolean => {
-		if (!state) {
-			state = $fallingTetroState;
-		}
-		for (let _ = 0; _ < state.length; _++) {
-			const coord = state[_];
-			const ptY = coord[0] + dY;
-			const ptX = coord[1] + dX;
-			if (!(ptY >= -1 && ptY < nRow && ptX >= 0 && ptX < nCol) || (ptY >= 0 && table[ptY][ptX])) {
-				return false;
-			}
-		}
-		return true;
-	};
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -172,7 +168,7 @@
 			{#each table as row, i}
 				<div class="flex first:pt-0 last:pb-0 divide-x divide-slate-900">
 					{#each row as col, j}
-						{#if shouldDrawBlock(i, j)}
+						{#if $gameSwitch && shouldDrawBlock(i, j)}
 							<svelte:component this={$fallingTetro.texture} />
 						{:else if col != null}
 							<svelte:component this={col} />
@@ -203,11 +199,11 @@
 		<div class="font-mono text-white">Rows: {$rowsEliminated}</div>
 		<div class="grow font-mono text-white">Score: {$score}</div>
 		<div class="shrink flex flex-col gap-3">
-			{#if !$gameRunning}
+			{#if !$gameSwitch}
 				<button
 					class="w-full rounded-sm bg-slate-400 hover:bg-slate-300 transition-colors duration-200"
 					on:click={() => {
-						$gameRunning = true;
+						$gameSwitch = true;
 					}}>Start</button
 				>
 			{:else}
