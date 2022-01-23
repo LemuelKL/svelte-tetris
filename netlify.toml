@@ -1,0 +1,7 @@
+[build]
+  publish = "build"
+  command = "npx pnpm i --store=node_modules/.pnpm && npx pnpm run build"
+
+[functions]
+  directory = "functions"
+  node_bundler = "esbuild"
